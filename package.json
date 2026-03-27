@@ -1,0 +1,12 @@
+{
+  "name": "dialectic-debate",
+  "version": "0.1.0",
+  "description": "Two-LLM debate app with transcript and summary views",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "check": "node --check src/server.js && node --check src/debateEngine.js && node --check src/providers.js"
+  }
+}

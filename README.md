@@ -1,102 +1,129 @@
 # Dialectic: Two-LLM Debate Studio
 
-A starter app for running structured debates between two LLMs:
+Dialectic is a debate-first AI application where two language models argue opposing sides of a question, produce a detailed transcript with evidence anchors, and generate a high-fidelity summary that preserves critical facts and figures.
 
-- One model argues **for** a motion (or **Option A**)
-- One model argues **against** a motion (or **Option B**)
-- They alternate turns until they run out of new arguments (or max rounds)
-- Turns stream live in the UI with a per-side thinking indicator
-- You get both:
-  - Full **transcript**
-  - Single **summary** that synthesizes both sides
-- Debate turns now include structured evidence anchors (facts, figures/dates, source hints, reliability)
-- Summaries preserve high-value detail via an evidence ledger instead of flattening unique facts
-- Debates can be saved to local JSON files and reopened later
+## Why This Project Exists
 
-It supports cloud and local providers out of the box:
+Most AI answers are single-threaded: one model, one viewpoint, one final answer. For complex or controversial topics, this often hides uncertainty and alternative interpretations.
 
-- OpenAI
-- Anthropic (Claude)
-- Ollama (local)
+Dialectic was built to:
 
-## Quick Start
+- Force adversarial reasoning (`for` vs `against` / `A` vs `B`).
+- Encourage richer evidence use (facts, figures, source hints, case examples).
+- Preserve nuance in the final summary instead of blending everything into generic advice.
+- Make the reasoning process inspectable via a streaming transcript.
 
-1. Create env file:
+## Core Capabilities
 
-```bash
-cp .env.example .env
+- Two-agent structured debate with alternating turns.
+- Supports `Motion` and `A vs B` debate types.
+- Pluggable models/providers:
+  - OpenAI
+  - Anthropic (Claude)
+  - Ollama (local)
+- Live streaming UI with:
+  - per-side thinking indicator
+  - incremental turn rendering
+- Evidence-dense turn schema:
+  - argument text
+  - evidence anchors (facts, figure/date, source, reliability)
+  - plain-language note
+- High-detail summary pipeline:
+  - markdown output for humans
+  - structured summary object with evidence ledger
+- Local archive:
+  - save debates as JSON
+  - browse and reload old debates from UI
+
+## High-Level Architecture
+
+```mermaid
+flowchart LR
+    UI["Browser UI (public/app.js)"] -->|POST /api/debate/stream| API["Node HTTP Server (src/server.js)"]
+    API --> ENGINE["Debate Engine (src/debateEngine.js)"]
+    ENGINE --> PROVIDERS["Provider Adapters (src/providers.js)"]
+    PROVIDERS --> OPENAI["OpenAI"]
+    PROVIDERS --> ANTHROPIC["Anthropic"]
+    PROVIDERS --> OLLAMA["Ollama"]
+    ENGINE --> API
+    API -->|SSE events| UI
+    API --> STORAGE["storage/debates/*.json"]
+    UI -->|GET /api/debates, /api/debates/:id| API
 ```
 
-2. Add keys as needed (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) and/or keep them blank if you provide keys in the UI.
+### Main Components
 
-3. Start the app:
+- `src/server.js`
+  - HTTP server, routing, static assets, SSE stream endpoint.
+  - Local debate persistence and retrieval APIs.
+- `src/debateEngine.js`
+  - Debate loop, prompt construction, turn parsing/normalization.
+  - Summary generation and structured summary parsing.
+- `src/providers.js`
+  - Unified completion interface for OpenAI/Anthropic/Ollama.
+- `public/index.html`, `public/styles.css`, `public/app.js`
+  - Setup form, live transcript rendering, markdown summary view, saved debate browser.
 
-```bash
-npm start
-```
+## Prompt Design (How Quality Is Enforced)
 
-4. Open [http://localhost:3000](http://localhost:3000)
+The project uses **structured JSON prompts** so output is machine-checkable and consistently information-dense.
 
-## Debate Modes
+### Debater Turn Prompt Requirements
 
-- `Motion`: classic for-vs-against
-  - Example: `Is homeopathy an actual science?`
-- `A vs B`: each model defends one option
-  - Example question: `Nature vs Nurture`
-  - Option A: `Nature`
-  - Option B: `Nurture`
+Each turn is asked to return JSON with:
 
-## How Stopping Works
+- `argument` (4-8 substantive sentences)
+- `hasMore` (continue/stop signal)
+- `confidence` (0.0-1.0)
+- `audienceNote` (plain-language distillation)
+- `evidence[]` where each item may include:
+  - `type` (`statistic`, `study`, `historical_case`, etc.)
+  - `fact`
+  - `figureOrDate`
+  - `source`
+  - `whyItMatters`
+  - `reliability`
+- `citations[]`
 
-Each turn asks the model to return structured JSON including `hasMore`.
+Prompt quality constraints include:
 
-- If a model sets `hasMore: false`, that side is marked exhausted.
-- Debate stops when both sides are exhausted, or when `maxRounds` is reached.
+- include concrete facts and at least one number/date when possible
+- rebut prior turn content explicitly
+- avoid repetition
+- mark uncertain evidence as uncertain
 
-## Project Structure
+### Summary Prompt Requirements
 
-- `/src/server.js`: HTTP server + static file serving + API routes
-- `/src/debateEngine.js`: debate loop, stop logic, summary generation
-- `/src/providers.js`: provider adapters (OpenAI/Anthropic/Ollama)
-- `/public/index.html`: UI markup
-- `/public/styles.css`: UI styling
-- `/public/app.js`: browser logic and rendering
+The summarizer is asked for strict JSON containing:
 
-## API
+- `overview`
+- `bestCaseFor[]`
+- `bestCaseAgainst[]`
+- `evidenceLedger[]` (atomic fact rows with side/source/reliability)
+- `convergence[]`
+- `openQuestions[]`
+- `decisionTakeaway`
 
-### `POST /api/debate`
+This is then transformed into readable markdown while preserving details.
 
-Request body:
+## Debate Lifecycle
 
-```json
-{
-  "debateType": "motion",
-  "question": "Is homeopathy an actual science?",
-  "maxRounds": 6,
-  "forModel": {
-    "provider": "openai",
-    "model": "gpt-5-nano"
-  },
-  "againstModel": {
-    "provider": "anthropic",
-    "model": "claude-3-5-sonnet-latest"
-  },
-  "skipSummary": false,
-  "useSeparateSummaryModel": false
-}
-```
+1. User submits debate config.
+2. Server starts SSE stream.
+3. Engine runs alternating turns:
+   - emits `thinking` event for side
+   - obtains model JSON turn
+   - appends normalized turn
+   - emits `turn` event
+4. Loop ends when:
+   - both sides exhausted (`hasMore: false`), or
+   - `maxRounds` reached
+5. Summary phase runs (optional), emits `summary` event.
+6. Server emits `complete` event (optionally saves debate).
 
-Response body includes:
+## Streaming Events (`POST /api/debate/stream`)
 
-- `meta`: debate metadata and stop reason
-- `transcript`: all turns
-- `summary`: synthesized view
-- `summaryError`: error text if summary failed
-- `savedDebate`: metadata when `saveDebate: true`
-
-### `POST /api/debate/stream`
-
-Streams debate lifecycle events as `text/event-stream`:
+SSE event types:
 
 - `start`
 - `thinking`
@@ -106,25 +133,192 @@ Streams debate lifecycle events as `text/event-stream`:
 - `complete`
 - `error`
 
+## Data Models
+
+### Transcript Turn (normalized)
+
+```json
+{
+  "round": 1,
+  "side": "for",
+  "sideLabel": "For the motion",
+  "argument": "...",
+  "hasMore": true,
+  "confidence": 0.72,
+  "citations": ["WHO report 2023"],
+  "audienceNote": "Simple interpretation...",
+  "evidence": [
+    {
+      "type": "study",
+      "fact": "Observed effect in cohort...",
+      "figureOrDate": "2021",
+      "source": "Journal Name (2021)",
+      "whyItMatters": "Supports mechanism plausibility",
+      "reliability": "medium"
+    }
+  ]
+}
+```
+
+### Summary Payload
+
+- `summary`: markdown rendering for UI
+- `summaryRaw`: raw model response
+- `summaryStructured`: parsed JSON summary object (if parseable)
+
+## Storage Model
+
+Saved debate files live in:
+
+- `storage/debates/<id>.json`
+
+Each file contains:
+
+- `id`, `createdAt`
+- `request` (sanitized, no API keys)
+- `result` (full runtime result payload)
+- `debate` (explicit copy of meta/transcript/summary fields)
+
+## Installation
+
+### Prerequisites
+
+- Node.js 18+ (20+ recommended)
+- Optional:
+  - OpenAI API key
+  - Anthropic API key
+  - local Ollama instance (if using local models)
+
+### Setup
+
+```bash
+cp .env.example .env
+```
+
+Populate as needed:
+
+- `OPENAI_API_KEY=...`
+- `ANTHROPIC_API_KEY=...`
+- optional base URLs:
+  - `OPENAI_BASE_URL`
+  - `ANTHROPIC_BASE_URL`
+  - `OLLAMA_BASE_URL`
+- optional runtime:
+  - `HOST` (default `127.0.0.1`)
+  - `PORT` (default `3000`)
+
+## Running the Project
+
+### Production-like run
+
+```bash
+npm start
+```
+
+### Dev watch mode
+
+```bash
+npm run dev
+```
+
+### Syntax checks
+
+```bash
+npm run check
+node --check public/app.js
+```
+
+Open:
+
+- [http://localhost:3000](http://localhost:3000)
+
+## How to Use
+
+1. Choose debate type:
+   - `Motion` (for vs against), or
+   - `A vs B` (model A vs model B)
+2. Enter question and optional A/B labels.
+3. Configure model providers for each side.
+4. Set `maxRounds`.
+5. Optionally:
+   - skip summary
+   - use separate summary model
+   - save debate to local storage
+6. Click **Run Debate**.
+7. Watch transcript stream in real time and switch to Summary tab.
+8. Reload archived debates from Saved Debates panel.
+
+## API Reference
+
+### `GET /api/health`
+
+Health check.
+
+### `GET /api/providers`
+
+Returns provider defaults/placeholders.
+
+### `POST /api/debate`
+
+Runs full debate and returns final payload in one response.
+
+### `POST /api/debate/stream`
+
+Runs debate with SSE streaming.
+
+Example request body:
+
+```json
+{
+  "debateType": "motion",
+  "question": "Is homeopathy an actual science?",
+  "maxRounds": 6,
+  "forModel": { "provider": "openai", "model": "gpt-5-nano" },
+  "againstModel": { "provider": "anthropic", "model": "claude-3-5-sonnet-latest" },
+  "skipSummary": false,
+  "useSeparateSummaryModel": false,
+  "saveDebate": true
+}
+```
+
 ### `GET /api/debates`
 
-Returns saved debate metadata for the archive view in the UI.
+Returns saved debate metadata list.
 
 ### `GET /api/debates/:id`
 
-Returns one stored debate record, including transcript + summary.
+Returns one saved debate file payload.
 
-## Storage
+## Configuration Notes
 
-- Saved debates are written to `/storage/debates/*.json`.
-- Each saved file contains the full debate transcript and summary.
-- Saved transcript entries include evidence anchors and plain-language notes for each turn.
-- API keys are not persisted to stored debate files.
+- OpenAI default placeholder is `gpt-5-nano`.
+- OpenAI temperature is omitted by default unless explicitly provided per model config.
+- Ollama default base URL is `http://localhost:11434`.
+- Provider API keys can come from env or UI inputs.
 
-## Notes
+## Extending the Project
 
-- OpenAI + Anthropic API keys can be supplied either in env vars or directly in the UI.
-- Ollama defaults to `http://localhost:11434`.
-- This is a starter architecture; you can extend with:
-  - citations verification
-  - judge/scoring model
+Recommended next extensions:
+
+- Add web retrieval + citation verification pipeline (RAG or tool calling).
+- Add “judge” model for scoring evidence quality and logical consistency.
+- Add token-level streaming from providers where available.
+- Add user auth + shared debate workspaces.
+- Persist to database (SQLite/Postgres) instead of local JSON files.
+
+## Limitations
+
+- Evidence quality depends on model behavior; source hints are not automatically verified.
+- No built-in external web retrieval step yet.
+- Summary parser is robust but still depends on model returning parseable JSON.
+
+## Troubleshooting
+
+- `HTTP 400` from provider:
+  - verify model name and provider-specific parameter support.
+- Empty or weak evidence:
+  - increase `maxRounds`, use stronger model, or use separate summarizer.
+- Ollama failures:
+  - check Ollama is running and model is pulled.
+- No saved debates shown:
+  - ensure `saveDebate` is enabled and server has write access to `storage/debates`.
