@@ -393,6 +393,64 @@ button[type='submit']:disabled {
   white-space: pre-wrap;
 }
 
+.turn-angle {
+  font-size: 0.8rem;
+  color: rgba(118, 48, 10, 0.96);
+  background: rgba(229, 135, 72, 0.16);
+  border: 1px solid rgba(175, 89, 33, 0.3);
+  border-radius: 8px;
+  padding: 0.3rem 0.5rem;
+  width: fit-content;
+}
+
+.turn-collapsible {
+  border: 1px solid rgba(31, 27, 25, 0.16);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.turn-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: rgba(31, 27, 25, 0.88);
+  padding: 0.36rem 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.turn-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.turn-collapsible > summary::after {
+  content: '+';
+  font-weight: 700;
+  color: rgba(31, 27, 25, 0.7);
+}
+
+.turn-collapsible[open] > summary::after {
+  content: '−';
+}
+
+.turn-collapsible-body {
+  border-top: 1px solid rgba(31, 27, 25, 0.12);
+  padding: 0.45rem 0.5rem 0.5rem;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.turn-counter {
+  font-size: 0.84rem;
+  color: rgba(20, 58, 68, 0.95);
+  background: rgba(111, 173, 187, 0.18);
+  border: 1px solid rgba(39, 101, 117, 0.28);
+  border-radius: 8px;
+  padding: 0.35rem 0.5rem;
+}
+
 .turn-note {
   font-size: 0.85rem;
   color: rgba(31, 27, 25, 0.84);

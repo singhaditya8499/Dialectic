@@ -108,13 +108,51 @@ function loadEnvFile(envPath) {
       continue;
     }
 
-    const key = trimmed.slice(0, equalIndex).trim();
-    const value = trimmed.slice(equalIndex + 1).trim();
+    let key = trimmed.slice(0, equalIndex).trim();
+    const rawValue = trimmed.slice(equalIndex + 1);
+
+    if (key.startsWith('export ')) {
+      key = key.slice('export '.length).trim();
+    }
+
+    const value = parseEnvValue(rawValue);
 
     if (!(key in process.env)) {
       process.env[key] = value;
     }
   }
+}
+
+function parseEnvValue(rawValue) {
+  const trimmed = String(rawValue || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  const hasMatchingQuotes = (first === '"' && last === '"') || (first === "'" && last === "'");
+
+  if (hasMatchingQuotes) {
+    const inner = trimmed.slice(1, -1);
+    if (first === '"') {
+      return inner
+        .replace(/\\n/g, '\n')
+        .replace(/\\r/g, '\r')
+        .replace(/\\t/g, '\t')
+        .replace(/\\"/g, '"');
+    }
+
+    return inner;
+  }
+
+  // Support inline comments for unquoted values: KEY=value # comment
+  const commentIndex = trimmed.search(/\s#/);
+  if (commentIndex >= 0) {
+    return trimmed.slice(0, commentIndex).trim();
+  }
+
+  return trimmed;
 }
 
 async function readJsonBody(req, maxBytes) {

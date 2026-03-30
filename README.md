@@ -75,6 +75,7 @@ Each turn is asked to return JSON with:
 - `argument` (4-8 substantive sentences)
 - `hasMore` (continue/stop signal)
 - `confidence` (0.0-1.0)
+- `angle` (fresh lens for the current round)
 - `audienceNote` (plain-language distillation)
 - `evidence[]` where each item may include:
   - `type` (`statistic`, `study`, `historical_case`, etc.)
@@ -89,7 +90,9 @@ Prompt quality constraints include:
 
 - include concrete facts and at least one number/date when possible
 - rebut prior turn content explicitly
-- avoid repetition
+- use a new round angle for each side
+- avoid repetition (including near-duplicate rephrases)
+- include fresh evidence/citation material in continuing rounds
 - mark uncertain evidence as uncertain
 
 ### Summary Prompt Requirements
@@ -116,7 +119,9 @@ This is then transformed into readable markdown while preserving details.
    - appends normalized turn
    - emits `turn` event
 4. Loop ends when:
-   - both sides exhausted (`hasMore: false`), or
+   - either side reports no more arguments (`hasMore: false`), or
+   - novelty guard detects no new rebuttal/evidence/angle after rewrite attempts, or
+   - both sides exhausted, or
    - `maxRounds` reached
 5. Summary phase runs (optional), emits `summary` event.
 6. Server emits `complete` event (optionally saves debate).
@@ -145,6 +150,7 @@ SSE event types:
   "argument": "...",
   "hasMore": true,
   "confidence": 0.72,
+  "angle": "Lifecycle cost in dense housing",
   "citations": ["WHO report 2023"],
   "audienceNote": "Simple interpretation...",
   "evidence": [
@@ -311,6 +317,7 @@ Recommended next extensions:
 - Evidence quality depends on model behavior; source hints are not automatically verified.
 - No built-in external web retrieval step yet.
 - Summary parser is robust but still depends on model returning parseable JSON.
+- Novelty checks are lexical/heuristic and may occasionally flag valid paraphrases.
 
 ## Troubleshooting
 

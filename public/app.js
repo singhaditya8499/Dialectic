@@ -163,7 +163,7 @@ function hideLiveStatus() {
 function readModelConfig(prefix) {
   const provider = document.getElementById(`${prefix}-provider`).value;
   const model = document.getElementById(`${prefix}-model`).value.trim();
-  const apiKey = document.getElementById(`${prefix}-api-key`).value.trim();
+  const apiKey = normalizeSecretInput(document.getElementById(`${prefix}-api-key`).value);
   const baseUrl = document.getElementById(`${prefix}-base-url`).value.trim();
 
   const config = {
@@ -180,6 +180,19 @@ function readModelConfig(prefix) {
   }
 
   return config;
+}
+
+function normalizeSecretInput(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  const first = trimmed[0];
+  const last = trimmed[trimmed.length - 1];
+  const hasMatchingQuotes = (first === '"' && last === '"') || (first === "'" && last === "'");
+
+  return hasMatchingQuotes ? trimmed.slice(1, -1).trim() : trimmed;
 }
 
 function buildPayload() {
@@ -530,12 +543,17 @@ function renderMeta(meta) {
     return;
   }
 
+  const stopReasonText = meta.stopReasonDisplay || (meta.stopSide ? `${meta.stopReason} (${meta.stopSide})` : meta.stopReason) || 'running';
   const lines = [
     `<strong>Question:</strong> ${escapeHtml(meta.question || '')}`,
     `<strong>Type:</strong> ${escapeHtml(meta.debateType || 'motion')}`,
     `<strong>Rounds:</strong> ${escapeHtml(String(meta.roundsCompleted || 0))} / ${escapeHtml(String(meta.maxRounds || 0))}`,
-    `<strong>Stop reason:</strong> ${escapeHtml(meta.stopReason || 'running')}`
+    `<strong>Stop reason:</strong> ${escapeHtml(stopReasonText)}`
   ];
+
+  if (meta.stopSide) {
+    lines.push(`<strong>Stopped at side:</strong> ${escapeHtml(meta.stopSide)}`);
+  }
 
   if (meta.debateType === 'choice') {
     lines.push(`<strong>Option A:</strong> ${escapeHtml(meta.optionA || 'Option A')}`);
@@ -565,6 +583,20 @@ function renderTranscript(turns) {
     body.className = 'turn-body';
     body.textContent = turn.argument || '';
 
+    let angle = null;
+    if (typeof turn.angle === 'string' && turn.angle.trim()) {
+      angle = document.createElement('div');
+      angle.className = 'turn-angle';
+      angle.textContent = `Angle: ${turn.angle.trim()}`;
+    }
+
+    let counterTo = null;
+    if (typeof turn.counterTo === 'string' && turn.counterTo.trim()) {
+      counterTo = document.createElement('div');
+      counterTo.className = 'turn-counter';
+      counterTo.textContent = `Countering: ${turn.counterTo.trim()}`;
+    }
+
     let audienceNote = null;
     if (typeof turn.audienceNote === 'string' && turn.audienceNote.trim()) {
       audienceNote = document.createElement('div');
@@ -577,10 +609,6 @@ function renderTranscript(turns) {
       evidenceBlock = document.createElement('div');
       evidenceBlock.className = 'turn-evidence';
 
-      const heading = document.createElement('div');
-      heading.className = 'turn-evidence-title';
-      heading.textContent = 'Evidence anchors';
-
       const list = document.createElement('ul');
       for (const entry of turn.evidence.slice(0, 6)) {
         const item = document.createElement('li');
@@ -588,7 +616,6 @@ function renderTranscript(turns) {
         list.appendChild(item);
       }
 
-      evidenceBlock.appendChild(heading);
       evidenceBlock.appendChild(list);
     }
 
@@ -607,13 +634,29 @@ function renderTranscript(turns) {
       badges.appendChild(makeBadge(`citations: ${turn.citations.join('; ')}`));
     }
 
+    if (Array.isArray(turn.noveltyWarnings) && turn.noveltyWarnings.length > 0) {
+      badges.appendChild(makeBadge(`novelty check: ${turn.noveltyWarnings.length} warning(s)`));
+    }
+
+    if (turn.forcedStop) {
+      badges.appendChild(makeBadge('stopped: no new rebuttal/evidence'));
+    }
+
     article.appendChild(header);
     article.appendChild(body);
+    if (angle) {
+      article.appendChild(angle);
+    }
+    if (counterTo) {
+      article.appendChild(makeCollapsibleSection('Countering', counterTo));
+    }
     if (audienceNote) {
-      article.appendChild(audienceNote);
+      article.appendChild(makeCollapsibleSection('Plain-language note', audienceNote));
     }
     if (evidenceBlock) {
-      article.appendChild(evidenceBlock);
+      article.appendChild(
+        makeCollapsibleSection(`Evidence anchors (${turn.evidence.length})`, evidenceBlock)
+      );
     }
 
     if (badges.childNodes.length > 0) {
@@ -656,6 +699,23 @@ function makeBadge(text) {
   span.className = 'badge';
   span.textContent = text;
   return span;
+}
+
+function makeCollapsibleSection(title, contentNode) {
+  const details = document.createElement('details');
+  details.className = 'turn-collapsible';
+
+  const summary = document.createElement('summary');
+  summary.textContent = title;
+
+  const body = document.createElement('div');
+  body.className = 'turn-collapsible-body';
+  body.appendChild(contentNode);
+
+  details.appendChild(summary);
+  details.appendChild(body);
+
+  return details;
 }
 
 function formatEvidenceEntry(entry) {
