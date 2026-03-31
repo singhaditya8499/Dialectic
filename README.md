@@ -109,6 +109,83 @@ The summarizer is asked for strict JSON containing:
 
 This is then transformed into readable markdown while preserving details.
 
+## AI/ML Control Plane (Prompt Engineering + Alignment)
+
+This project uses a **guardrailed generation pipeline** rather than raw free-form prompting. The controls below are intentionally layered to improve consistency, factual density, and side alignment.
+
+### 1) Schema-Constrained Generation
+
+- Uses structured JSON outputs for debater and summarizer turns.
+- Enforces required fields like `position`, `angle`, `counterTo`, `evidence[]`, and `citations[]`.
+- Applies normalization/parsing fallback (`safeJsonParse`) to recover from minor formatting drift.
+
+Technical term mapping:
+- **Constrained decoding interface** (JSON mode / schema-shaped output)
+- **Post-generation validation** (server-side checks after model output)
+
+### 2) Role Conditioning + Stance Locking
+
+- Each model is role-conditioned with explicit side identity (`for`/`against` or `A`/`B`).
+- Turn validator checks side alignment by requiring:
+  - `position` field to match the side exactly.
+  - argument prefix `Position defended: <side>.`
+  - explicit rebuttal target via `counterTo`.
+
+Technical term mapping:
+- **Role-conditioned prompting**
+- **Stance-consistency constraints**
+- **Rebuttal anchoring**
+
+### 3) Novelty Enforcement (Anti-Repetition)
+
+- Uses lexical similarity heuristics to detect repeated arguments/facts/citations.
+- Requires new angle + fresh evidence facts in continuing rounds.
+- If novelty fails, triggers revision attempts before hard stop.
+
+Technical term mapping:
+- **Iterative self-revision loop**
+- **Heuristic novelty gating**
+- **Jaccard-style lexical overlap checks**
+
+### 4) Evidence Grounding & Objectivity Bias
+
+- Prompts require evidence anchors (fact, figure/date, source, reliability).
+- Validator encourages objective claims by requiring concrete numbers/dates when continuing.
+- Argument text must explicitly mention at least one cited source/study when sources exist.
+- Weak-certainty claims are labeled with reliability/uncertainty tags.
+
+Technical term mapping:
+- **Evidence-grounded generation**
+- **Uncertainty calibration**
+- **Attribution-aware prompting**
+
+### 5) Termination Policy (When Debate Stops)
+
+- Stop conditions:
+  - side reports `hasMore: false`
+  - novelty guard fails after rewrite budget
+  - both sides exhausted
+  - `maxRounds` reached
+- `hasMore: false` acts as a **termination signal**; that low-value stop turn is not appended to transcript.
+- Metadata still captures stop reason/side, and summary includes stop context.
+
+Technical term mapping:
+- **Early stopping policy**
+- **Budgeted retry loop**
+- **Control-token style stop signaling**
+
+### 6) Hallucination Mitigation Strategy (Practical, Not Absolute)
+
+- Requires source hints, concrete evidence slots, and reliability labels.
+- Forces explicit source mention in prose when references are provided.
+- Summary preserves atomic facts in an evidence ledger to reduce detail loss.
+- No external retrieval/verification is currently built in, so this is a **mitigation layer**, not a proof of factual correctness.
+
+Technical term mapping:
+- **Structured anti-hallucination guardrails**
+- **Faithfulness-oriented summarization**
+- **Non-verifying attribution constraints**
+
 ## Debate Lifecycle
 
 1. User submits debate config.
@@ -116,7 +193,8 @@ This is then transformed into readable markdown while preserving details.
 3. Engine runs alternating turns:
    - emits `thinking` event for side
    - obtains model JSON turn
-   - appends normalized turn
+   - validates stance/novelty/evidence constraints
+   - appends normalized turn only for continuing arguments
    - emits `turn` event
 4. Loop ends when:
    - either side reports no more arguments (`hasMore: false`), or
@@ -150,7 +228,9 @@ SSE event types:
   "argument": "...",
   "hasMore": true,
   "confidence": 0.72,
+  "position": "For the motion",
   "angle": "Lifecycle cost in dense housing",
+  "counterTo": "Opponent claim being rebutted in this turn",
   "citations": ["WHO report 2023"],
   "audienceNote": "Simple interpretation...",
   "evidence": [

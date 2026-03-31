@@ -72,6 +72,8 @@ body {
   padding: 1rem;
   display: grid;
   gap: 1rem;
+  align-content: start;
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .setup-panel h1 {
@@ -83,6 +85,64 @@ body {
 .subtitle {
   margin: 0.45rem 0 1rem;
   color: rgba(31, 27, 25, 0.82);
+}
+
+.setup-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: stretch;
+  width: 100%;
+  height: 2.9rem;
+  padding: 0.2rem;
+  border: 1px solid rgba(31, 27, 25, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.setup-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  height: 100%;
+  margin: 0;
+  padding: 0 0.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  font-weight: 600;
+  font-size: 0.9rem;
+  line-height: 1;
+  color: rgba(31, 27, 25, 0.78);
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
+}
+
+.setup-tab:hover {
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.setup-tab.active {
+  background: var(--teal);
+  border-color: rgba(31, 27, 25, 0.06);
+  color: #ecfbfb;
+}
+
+.setup-tab:focus-visible {
+  outline: 2px solid rgba(47, 104, 113, 0.36);
+  outline-offset: 1px;
+}
+
+.setup-view {
+  display: grid;
+  gap: 0.85rem;
+  min-height: 0;
+}
+
+#setup-view-saved {
+  height: 100%;
 }
 
 form {
@@ -143,6 +203,47 @@ textarea {
   display: grid;
   grid-template-columns: 1fr;
   gap: 0.8rem;
+}
+
+.config-collapsible {
+  border: 1px solid rgba(31, 27, 25, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.config-collapsible > summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: 'Fraunces', 'Georgia', serif;
+  font-size: 1.04rem;
+  color: var(--deep);
+  padding: 0.56rem 0.72rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.config-collapsible > summary::-webkit-details-marker {
+  display: none;
+}
+
+.config-collapsible > summary::after {
+  content: '+';
+  font-family: 'IBM Plex Sans', 'Avenir Next', 'Segoe UI', sans-serif;
+  font-size: 1rem;
+  font-weight: 700;
+  color: rgba(31, 27, 25, 0.72);
+}
+
+.config-collapsible[open] > summary::after {
+  content: '−';
+}
+
+.config-collapsible-body {
+  border-top: 1px solid rgba(31, 27, 25, 0.14);
+  padding: 0.72rem;
+  display: grid;
+  gap: 0.85rem;
 }
 
 .model-card {
@@ -239,12 +340,16 @@ button[type='submit']:disabled {
   padding: 0.75rem;
   display: grid;
   gap: 0.65rem;
+  min-height: 0;
+  height: 100%;
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
 .saved-list {
   display: grid;
   gap: 0.55rem;
-  max-height: 240px;
+  min-height: 0;
+  height: 100%;
   overflow-y: auto;
   padding-right: 0.2rem;
 }
@@ -567,6 +672,14 @@ button[type='submit']:disabled {
 
 .hidden {
   display: none !important;
+}
+
+.maker-note {
+  width: min(1200px, calc(100vw - 2rem));
+  margin: 0 auto 1.2rem;
+  text-align: center;
+  color: rgba(31, 27, 25, 0.72);
+  font-size: 0.85rem;
 }
 
 @keyframes reveal {

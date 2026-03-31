@@ -22,9 +22,14 @@ const liveStatusEl = document.getElementById('live-status');
 const refreshSavedButton = document.getElementById('refresh-saved');
 const savedListEl = document.getElementById('saved-list');
 const tabs = Array.from(document.querySelectorAll('.tab'));
+const setupTabs = Array.from(document.querySelectorAll('.setup-tab'));
 const tabContents = {
   transcript: transcriptEl,
   summary: summaryEl
+};
+const setupViews = {
+  debate: document.getElementById('setup-view-debate'),
+  saved: document.getElementById('setup-view-saved')
 };
 
 const providerSelectIds = ['for-provider', 'against-provider', 'summary-provider'];
@@ -35,6 +40,7 @@ async function init() {
   await loadSavedDebates();
   applyModeVisibility();
   applySummaryVisibility();
+  setActiveSetupTab('debate');
   setStatus('Ready.', 'idle');
   renderEmptyState();
 }
@@ -60,6 +66,10 @@ function attachListeners() {
 
   for (const tab of tabs) {
     tab.addEventListener('click', () => setActiveTab(tab.dataset.tab));
+  }
+
+  for (const tab of setupTabs) {
+    tab.addEventListener('click', () => setActiveSetupTab(tab.dataset.setupTab));
   }
 }
 
@@ -141,6 +151,16 @@ function setActiveTab(tabName) {
   }
 
   for (const [name, section] of Object.entries(tabContents)) {
+    section.classList.toggle('hidden', name !== tabName);
+  }
+}
+
+function setActiveSetupTab(tabName) {
+  for (const tab of setupTabs) {
+    tab.classList.toggle('active', tab.dataset.setupTab === tabName);
+  }
+
+  for (const [name, section] of Object.entries(setupViews)) {
     section.classList.toggle('hidden', name !== tabName);
   }
 }

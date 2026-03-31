@@ -18,7 +18,13 @@
         <h1>Dialectic</h1>
         <p class="subtitle">Run a structured debate between two LLMs, then read full turns or a balanced synthesis.</p>
 
-        <form id="debate-form">
+        <div class="setup-tabs" role="tablist" aria-label="Setup Sections">
+          <button type="button" class="setup-tab active" data-setup-tab="debate">Debate</button>
+          <button type="button" class="setup-tab" data-setup-tab="saved">Saved Debates</button>
+        </div>
+
+        <section id="setup-view-debate" class="setup-view">
+          <form id="debate-form">
           <div class="section-heading">Debate Setup</div>
 
           <label>
@@ -56,109 +62,118 @@
             <input name="maxRounds" id="max-rounds" type="number" min="1" max="20" value="6" />
           </label>
 
-          <div class="section-heading">Model Connectors</div>
+          <details class="config-collapsible">
+            <summary>Model Connectors</summary>
+            <div class="config-collapsible-body">
+              <div class="model-grid">
+                <article class="model-card">
+                  <h2 id="for-card-title">For the Motion / Option A</h2>
+                  <label>
+                    Provider
+                    <select name="forProvider" id="for-provider" required>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Claude (Anthropic)</option>
+                      <option value="ollama">Ollama (Local)</option>
+                    </select>
+                  </label>
+                  <label>
+                    Model
+                    <input name="forModel" id="for-model" type="text" placeholder="gpt-5-nano" required />
+                  </label>
+                  <label>
+                    API Key (optional if set in server env)
+                    <input name="forApiKey" id="for-api-key" type="password" placeholder="sk-..." autocomplete="new-password" />
+                  </label>
+                  <label>
+                    Base URL (optional)
+                    <input name="forBaseUrl" id="for-base-url" type="text" placeholder="https://api.openai.com/v1" />
+                  </label>
+                </article>
 
-          <div class="model-grid">
-            <article class="model-card">
-              <h2 id="for-card-title">For the Motion / Option A</h2>
-              <label>
-                Provider
-                <select name="forProvider" id="for-provider" required>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Claude (Anthropic)</option>
-                  <option value="ollama">Ollama (Local)</option>
-                </select>
-              </label>
-              <label>
-                Model
-                <input name="forModel" id="for-model" type="text" placeholder="gpt-5-nano" required />
-              </label>
-              <label>
-                API Key (optional if set in server env)
-                <input name="forApiKey" id="for-api-key" type="password" placeholder="sk-..." autocomplete="new-password" />
-              </label>
-              <label>
-                Base URL (optional)
-                <input name="forBaseUrl" id="for-base-url" type="text" placeholder="https://api.openai.com/v1" />
-              </label>
-            </article>
+                <article class="model-card">
+                  <h2 id="against-card-title">Against the Motion / Option B</h2>
+                  <label>
+                    Provider
+                    <select name="againstProvider" id="against-provider" required>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Claude (Anthropic)</option>
+                      <option value="ollama">Ollama (Local)</option>
+                    </select>
+                  </label>
+                  <label>
+                    Model
+                    <input name="againstModel" id="against-model" type="text" placeholder="claude-3-5-sonnet-latest" required />
+                  </label>
+                  <label>
+                    API Key (optional if set in server env)
+                    <input name="againstApiKey" id="against-api-key" type="password" placeholder="sk-ant-..." autocomplete="new-password" />
+                  </label>
+                  <label>
+                    Base URL (optional)
+                    <input name="againstBaseUrl" id="against-base-url" type="text" placeholder="https://api.anthropic.com" />
+                  </label>
+                </article>
+              </div>
+            </div>
+          </details>
 
-            <article class="model-card">
-              <h2 id="against-card-title">Against the Motion / Option B</h2>
-              <label>
-                Provider
-                <select name="againstProvider" id="against-provider" required>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Claude (Anthropic)</option>
-                  <option value="ollama">Ollama (Local)</option>
-                </select>
+          <details class="config-collapsible">
+            <summary>Summary Settings</summary>
+            <div class="config-collapsible-body">
+              <label class="inline-check">
+                <input type="checkbox" id="skip-summary" />
+                Skip summary generation
               </label>
-              <label>
-                Model
-                <input name="againstModel" id="against-model" type="text" placeholder="claude-3-5-sonnet-latest" required />
+
+              <label class="inline-check">
+                <input type="checkbox" id="separate-summary-model" />
+                Use a separate summarizer model
               </label>
-              <label>
-                API Key (optional if set in server env)
-                <input name="againstApiKey" id="against-api-key" type="password" placeholder="sk-ant-..." autocomplete="new-password" />
+
+              <label class="inline-check">
+                <input type="checkbox" id="save-debate" checked />
+                Save this debate to local file storage
               </label>
-              <label>
-                Base URL (optional)
-                <input name="againstBaseUrl" id="against-base-url" type="text" placeholder="https://api.anthropic.com" />
-              </label>
-            </article>
-          </div>
 
-          <div class="section-heading">Summary Settings</div>
-
-          <label class="inline-check">
-            <input type="checkbox" id="skip-summary" />
-            Skip summary generation
-          </label>
-
-          <label class="inline-check">
-            <input type="checkbox" id="separate-summary-model" />
-            Use a separate summarizer model
-          </label>
-
-          <label class="inline-check">
-            <input type="checkbox" id="save-debate" checked />
-            Save this debate to local file storage
-          </label>
-
-          <div class="summary-model hidden" id="summary-model-area">
-            <label>
-              Summary Provider
-              <select id="summary-provider">
-                <option value="openai">OpenAI</option>
-                <option value="anthropic">Claude (Anthropic)</option>
-                <option value="ollama">Ollama (Local)</option>
-              </select>
-            </label>
-            <label>
-              Summary Model
-              <input id="summary-model" type="text" placeholder="gpt-5-nano" />
-            </label>
-            <label>
-              Summary API Key (optional)
-              <input id="summary-api-key" type="password" placeholder="sk-..." autocomplete="new-password" />
-            </label>
-            <label>
-              Summary Base URL (optional)
-              <input id="summary-base-url" type="text" placeholder="https://api.openai.com/v1" />
-            </label>
-          </div>
+              <div class="summary-model hidden" id="summary-model-area">
+                <label>
+                  Summary Provider
+                  <select id="summary-provider">
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Claude (Anthropic)</option>
+                    <option value="ollama">Ollama (Local)</option>
+                  </select>
+                </label>
+                <label>
+                  Summary Model
+                  <input id="summary-model" type="text" placeholder="gpt-5-nano" />
+                </label>
+                <label>
+                  Summary API Key (optional)
+                  <input id="summary-api-key" type="password" placeholder="sk-..." autocomplete="new-password" />
+                </label>
+                <label>
+                  Summary Base URL (optional)
+                  <input id="summary-base-url" type="text" placeholder="https://api.openai.com/v1" />
+                </label>
+              </div>
+            </div>
+          </details>
 
           <button type="submit" id="run-button">Run Debate</button>
           <p id="status" class="status idle">Ready.</p>
-        </form>
+          </form>
+        </section>
 
-        <div class="saved-debates">
-          <div class="section-heading section-inline">
-            <span>Saved Debates</span>
-            <button type="button" id="refresh-saved" class="ghost-button">Refresh</button>
+        <section id="setup-view-saved" class="setup-view hidden">
+          <div class="saved-debates">
+            <div class="section-heading section-inline">
+              <span>Saved Debates</span>
+              <button type="button" id="refresh-saved" class="ghost-button">Refresh</button>
+            </div>
+            <div id="saved-list" class="saved-list"></div>
           </div>
-          <div id="saved-list" class="saved-list"></div>
-        </div>
+        </section>
       </section>
 
       <section class="panel output-panel">
@@ -177,6 +192,7 @@
         <section id="summary" class="tab-content hidden"></section>
       </section>
     </main>
+    <p class="maker-note">Made with ❤️ by Aditya</p>
 
     <script type="module" src="/app.js"></script>
   </body>
