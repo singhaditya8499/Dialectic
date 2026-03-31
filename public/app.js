@@ -1,7 +1,15 @@
+import {
+  runDebateInBrowser,
+  listLocalDebates,
+  loadLocalDebateRecord,
+  saveLocalDebateRecord
+} from './clientDebate.js';
+
 const state = {
   providerDefaults: null,
   latestResult: null,
-  savedDebates: []
+  savedDebates: [],
+  serverApiAvailable: false
 };
 
 const form = document.getElementById('debate-form');
@@ -37,6 +45,7 @@ const providerSelectIds = ['for-provider', 'against-provider', 'summary-provider
 async function init() {
   attachListeners();
   await loadProviderDefaults();
+  applyBrowserModeRestrictions();
   await loadSavedDebates();
   applyModeVisibility();
   applySummaryVisibility();
@@ -81,12 +90,14 @@ async function loadProviderDefaults() {
     }
 
     state.providerDefaults = await response.json();
+    state.serverApiAvailable = true;
   } catch {
     state.providerDefaults = {
       openai: { baseUrl: 'https://api.openai.com/v1', modelPlaceholder: 'gpt-5-nano' },
       anthropic: { baseUrl: 'https://api.anthropic.com', modelPlaceholder: 'claude-3-5-sonnet-latest' },
       ollama: { baseUrl: 'http://localhost:11434', modelPlaceholder: 'llama3.1:8b' }
     };
+    state.serverApiAvailable = false;
   }
 
   applyProviderDefaults('for');
@@ -121,6 +132,31 @@ function applyProviderDefaults(prefix) {
 
   if (!baseUrlEl.value.trim() || knownBaseUrls.has(baseUrlEl.value.trim())) {
     baseUrlEl.value = defaults.baseUrl;
+  }
+}
+
+function applyBrowserModeRestrictions() {
+  const openAiOnly = !state.serverApiAvailable;
+
+  for (const id of providerSelectIds) {
+    const select = document.getElementById(id);
+    if (!select) {
+      continue;
+    }
+
+    for (const option of select.options) {
+      option.disabled = openAiOnly && option.value !== 'openai';
+    }
+
+    if (openAiOnly) {
+      select.value = 'openai';
+    }
+  }
+
+  if (openAiOnly) {
+    applyProviderDefaults('for');
+    applyProviderDefaults('against');
+    applyProviderDefaults('summary');
   }
 }
 
@@ -260,14 +296,19 @@ async function onSubmit(event) {
   };
 
   runButton.disabled = true;
-  setStatus('Running debate. Live turns will appear below...', 'running');
+  setStatus(
+    state.serverApiAvailable
+      ? 'Running debate. Live turns will appear below...'
+      : 'Running debate in browser mode...',
+    'running'
+  );
   renderResult(liveResult);
   showLiveStatus('Preparing debate...');
   setActiveTab('transcript');
   let sawCompleteEvent = false;
 
   try {
-    await streamDebate(payload, async (eventName, data) => {
+    const handleEvent = async (eventName, data) => {
       if (eventName === 'start' && data?.meta) {
         liveResult.meta = {
           ...liveResult.meta,
@@ -343,12 +384,43 @@ async function onSubmit(event) {
       if (eventName === 'error') {
         throw new Error(data?.error || 'Streamed debate failed.');
       }
-    });
+    };
+
+    if (state.serverApiAvailable) {
+      await streamDebate(payload, handleEvent);
+    } else {
+      const result = await runDebateInBrowser(payload, {
+        onStart: async (data) => handleEvent('start', data),
+        onThinking: async (data) => handleEvent('thinking', data),
+        onTurn: async (data) => handleEvent('turn', data),
+        onSummaryThinking: async (data) => handleEvent('summary_thinking', data),
+        onSummary: async (data) => handleEvent('summary', data)
+      });
+
+      const savedDebate = payload.saveDebate ? saveLocalDebateRecord(payload, result) : null;
+      await handleEvent('complete', {
+        result,
+        savedDebate
+      });
+    }
 
     if (!sawCompleteEvent) {
       throw new Error('Debate stream ended unexpectedly before completion.');
     }
   } catch (error) {
+    if (state.serverApiAvailable) {
+      const message = String(error?.message || '').toLowerCase();
+      const mightBeNoBackend =
+        message.includes('failed to fetch') ||
+        message.includes('networkerror') ||
+        message.includes('request failed with status 404') ||
+        message.includes('request failed with status 405');
+      if (mightBeNoBackend) {
+        state.serverApiAvailable = false;
+        applyBrowserModeRestrictions();
+      }
+    }
+
     hideLiveStatus();
     setStatus(error.message || 'Failed to run debate.', 'error');
   } finally {
@@ -462,13 +534,23 @@ function parseSseEvent(rawBlock) {
 }
 
 async function loadSavedDebates() {
-  const response = await fetch('/api/debates');
-  if (!response.ok) {
-    throw new Error('Could not load saved debates.');
+  if (state.serverApiAvailable) {
+    try {
+      const response = await fetch('/api/debates');
+      if (!response.ok) {
+        throw new Error('Could not load saved debates.');
+      }
+
+      const payload = await response.json();
+      state.savedDebates = Array.isArray(payload.debates) ? payload.debates : [];
+      renderSavedDebates(state.savedDebates);
+      return;
+    } catch {
+      state.serverApiAvailable = false;
+    }
   }
 
-  const payload = await response.json();
-  state.savedDebates = Array.isArray(payload.debates) ? payload.debates : [];
+  state.savedDebates = listLocalDebates();
   renderSavedDebates(state.savedDebates);
 }
 
@@ -523,21 +605,38 @@ function renderSavedDebates(debates) {
 async function loadSavedDebate(debateId) {
   setStatus('Loading saved debate...', 'running');
 
-  const response = await fetch(`/api/debates/${encodeURIComponent(debateId)}`);
-  if (!response.ok) {
-    const text = await response.text();
-    let parsedError = '';
-
+  let record = null;
+  if (state.serverApiAvailable) {
     try {
-      parsedError = JSON.parse(text)?.error || '';
-    } catch {
-      parsedError = '';
-    }
+      const response = await fetch(`/api/debates/${encodeURIComponent(debateId)}`);
+      if (!response.ok) {
+        const text = await response.text();
+        let parsedError = '';
 
-    throw new Error(parsedError || `Failed to load debate: ${response.status}`);
+        try {
+          parsedError = JSON.parse(text)?.error || '';
+        } catch {
+          parsedError = '';
+        }
+
+        throw new Error(parsedError || `Failed to load debate: ${response.status}`);
+      }
+
+      record = await response.json();
+    } catch (error) {
+      state.serverApiAvailable = false;
+      record = loadLocalDebateRecord(debateId);
+      if (!record) {
+        throw error;
+      }
+    }
+  } else {
+    record = loadLocalDebateRecord(debateId);
+    if (!record) {
+      throw new Error('Saved debate was not found in local storage.');
+    }
   }
 
-  const record = await response.json();
   const storedResult = getStoredResult(record);
 
   if (!storedResult) {

@@ -318,6 +318,37 @@ Open:
 
 - [http://localhost:3000](http://localhost:3000)
 
+## GitHub Pages Deployment (Static Browser Mode)
+
+This repository includes a GitHub Pages workflow:
+
+- `.github/workflows/pages.yml`
+
+It publishes the `public/` directory directly to Pages on pushes to `mainline`.
+
+### Enable Pages
+
+1. Open GitHub repository settings.
+2. Go to `Pages`.
+3. Set source to `GitHub Actions` (if not already selected).
+4. Push to `mainline` (or run the workflow manually).
+
+### Browser-Mode Behavior on Pages
+
+When backend APIs are unavailable (as on GitHub Pages), the app switches to browser mode:
+
+- runs debate generation directly from the browser
+- currently supports OpenAI provider flow
+- stores saved debates in browser `localStorage` (not server files)
+- keeps the same transcript/summary UI interactions
+
+### API Key Handling on Pages
+
+- Users can paste their own OpenAI key in the UI.
+- Keys are sent directly from the browser to OpenAI API endpoints.
+- Keys are not committed to git by this flow.
+- Do not embed a shared production key in frontend code.
+
 ## How to Use
 
 1. Choose debate type:
